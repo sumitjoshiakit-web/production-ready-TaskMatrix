@@ -1,0 +1,30 @@
+name: TaskMatrix CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: taskmatrix-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    name: Lint, typecheck and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: example-anon-key-for-build-only
+          NEXT_PUBLIC_SITE_URL: https://taskmatrix.example

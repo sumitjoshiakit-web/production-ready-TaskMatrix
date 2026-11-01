@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function NotFound(){return <main className="loading"><section className="panel" style={{width:"min(100% - 32px,520px)",textAlign:"center"}}><div className="eyebrow">404 · PAGE NOT FOUND</div><h1 style={{margin:"12px 0"}}>This page doesn’t exist.</h1><p className="sub">The link may be outdated, or the page may have moved.</p><Link className="btn primary" href="/" style={{display:"inline-flex",marginTop:20}}>Return to TaskMatrix</Link></section></main>}

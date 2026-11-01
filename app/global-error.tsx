@@ -1,0 +1,4 @@
+"use client";
+export default function GlobalError({reset}:{error:Error & {digest?:string};reset:()=>void}){
+ return <html lang="en"><body style={{margin:0,minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial,sans-serif",background:"#f8f9fb",color:"#20242b"}}><main style={{maxWidth:480,padding:28,textAlign:"center"}}><h1>TaskMatrix is temporarily unavailable.</h1><p>Please retry. If the issue continues, refresh the page or return later.</p><button onClick={()=>reset()} style={{padding:"11px 18px",border:0,borderRadius:9,background:"#6658d3",color:"#fff",cursor:"pointer"}}>Try again</button></main></body></html>
+}
