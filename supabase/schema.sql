@@ -84,9 +84,15 @@ grant select, insert, update, delete on public.tasks to authenticated;
 -- Sprint 15 PRD expansion: projects, five-stage workflow, team assignment,
 -- task comments, and an audit-friendly activity feed.
 
-update public.tasks t set project_id = null where t.project_id is not null and not exists (select 1 from public.projects p where p.id = t.project_id);
+-- Preserve existing task rows. Do not silently clear project_id values.
+-- Recreate the FK as NOT VALID so existing legacy rows are not rewritten or deleted.
+-- PostgreSQL will still enforce the relationship for new/updated rows.
 alter table public.tasks drop constraint if exists tasks_project_id_fkey;
-alter table public.tasks add constraint tasks_project_id_fkey foreign key (project_id) references public.projects(id) on delete set null;
+alter table public.tasks
+  add constraint tasks_project_id_fkey
+  foreign key (project_id) references public.projects(id)
+  on delete set null
+  not valid;
 
 -- Keep task ownership and project boundaries safe in the database, not only in the UI.
 create or replace function public.enforce_task_write_rules()
