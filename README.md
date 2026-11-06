@@ -31,6 +31,8 @@ Next.js 14 App Router · React 18 · TypeScript · Supabase Auth/Postgres/RLS ·
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/publishable key |
 | `NEXT_PUBLIC_SITE_URL` | No | Canonical URL used for metadata |
+| `GEMINI_API_KEY` | Optional for AI summary | Server-only Gemini API key; never expose with a NEXT_PUBLIC_ prefix |
+| `GEMINI_MODEL` | No | Optional Gemini model override (defaults to gemini-2.5-flash) |
 
 Never expose the Supabase `service_role` key in browser code, public environment variables, screenshots, or commits.
 
@@ -61,6 +63,9 @@ If this returns no rows, you may validate the constraint with `alter table publi
 - Refreshing a signed-in session preserves authentication and saved records.
 
 Do not mark these checks complete until they are tested against the actual Supabase project.
+
+## AI dashboard summary
+The dashboard includes an optional AI summary powered by a server-side Next.js route. Add `GEMINI_API_KEY` to Vercel Production/Preview/Development environment variables to enable it. The browser sends the signed-in Supabase access token and a bounded dashboard snapshot; the server verifies the user with Supabase before forwarding the summary request to Gemini. The provider key is never sent to the browser. If the key is absent or the provider is unavailable, the dashboard remains usable and shows a recoverable fallback message.
 
 ## Vercel deployment
 1. Import this repository into Vercel and select the Next.js preset.

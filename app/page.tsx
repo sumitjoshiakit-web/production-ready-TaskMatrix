@@ -1,15 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
 import {
   getSupabase,
   type Task,
@@ -19,6 +11,12 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import ProjectCard, { type Project, type ProjectMember } from "@/components/ProjectCard";
 import TaskBoard from "@/components/TaskBoard";
+import AiSummary from "@/components/AiSummary";
+
+const CompletionChart = dynamic(() => import("@/components/CompletionChart"), {
+  ssr: false,
+  loading: () => <div className="chart-loading">Preparing activity chart…</div>,
+});
 
 type Filter = "all" | TaskStatus;
 type Draft = {
@@ -404,18 +402,29 @@ export default function Home() {
   }
   async function addComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase || !user || !selected || !commentDraft.trim()) return;
+    if (!supabase || !user || !selected || !commentDraft.trim() || busy) return;
+    setBusy(true);
+    setError("");
     const { data, error: commentError } = await supabase.from("task_comments").insert({ task_id: selected.id, user_id: user.id, body: commentDraft.trim() }).select().single();
-    if (commentError) { setError(commentError.message); return; }
+    if (commentError) {
+      setBusy(false);
+      setError(commentError.message);
+      return;
+    }
     await supabase.from("task_activity").insert({ task_id: selected.id, user_id: user.id, action: "Added a comment" });
-    setComments((current) => [...current, data as Comment]); setCommentDraft("");
+    setComments((current) => [...current, data as Comment]);
+    setCommentDraft("");
     const { data: activityRows } = await supabase.from("task_activity").select("*").eq("task_id", selected.id).order("created_at", { ascending: false });
     setActivity((activityRows ?? []) as Activity[]);
+    setBusy(false);
+    notify("Comment posted successfully.");
   }
 
   async function addProjectMember(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault();
-    if (!supabase || !user || !memberEmail.trim()) return;
+    if (!supabase || !user || !memberEmail.trim() || busy) return;
+    setBusy(true);
+    setError("");
     const { data, error: memberError } = await supabase
       .from("project_members")
       .insert({
@@ -425,6 +434,7 @@ export default function Home() {
       })
       .select()
       .single();
+    setBusy(false);
     if (memberError) {
       setError(memberError.code === "23505" ? "This email is already on the project." : memberError.message);
       return;
@@ -447,6 +457,7 @@ export default function Home() {
       return;
     }
     setMembers((current) => current.filter((item) => item.id !== member.id));
+    notify("Team member removed.");
   }
 
   async function deleteProject(project: Project) {
@@ -745,11 +756,7 @@ export default function Home() {
                 type="submit"
                 disabled={busy}
               >
-                {busy
-                  ? "Please wait…"
-                  : authMode === "login"
-                    ? "Sign in →"
-                    : "Create account →"}
+                {busy ? <><span className="button-spinner" aria-hidden="true" /> Please wait…</> : authMode === "login" ? "Sign in →" : "Create account →"}
               </button>
             </form>
             <p className="secure-note">
@@ -886,7 +893,8 @@ export default function Home() {
           </div>
         )}
         {notice && (
-          <div className="success" role="status" style={{ marginBottom: 18 }}>
+          <div className="success toast-notice" role="status" aria-live="polite">
+            <span aria-hidden="true">✓</span>
             {notice}
           </div>
         )}
@@ -931,68 +939,7 @@ export default function Home() {
               <span className="badge done">This week</span>
             </div>
             <div className="chart-wrap">
-              {typeof window !== "undefined" && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={chartData}
-                    margin={{ top: 8, right: 5, left: -24, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="completionFill"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#6658d3"
-                          stopOpacity={0.22}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#6658d3"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      stroke="#edf0ed"
-                      strokeDasharray="4 4"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 12, fill: "#77817c" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: "#77817c" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 10,
-                        border: "1px solid #e7ebe7",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="completed"
-                      name="Completed"
-                      stroke="#6658d3"
-                      strokeWidth={2.5}
-                      fill="url(#completionFill)"
-                      activeDot={{ r: 5 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+              <CompletionChart data={chartData} />
             </div>
           </article>
           <article className="panel">
@@ -1046,6 +993,13 @@ export default function Home() {
             </p>
           </article>
         </section>
+        <AiSummary
+          tasks={tasks}
+          projects={projects}
+          totalTasks={metrics.total}
+          completedTasks={metrics.done}
+          overdueTasks={metrics.overdue}
+        />
         <section className="panel" id="projects">
           <div className="panel-head"><div><h2>Projects &amp; team</h2><p>Group tasks into projects and keep track of collaborators by email.</p></div></div>
           <form className="project-create" onSubmit={async (event) => {
@@ -1102,7 +1056,7 @@ export default function Home() {
               <div className="field"><label htmlFor="project-status">Initial status</label><select id="project-status" value={projectStatus} onChange={(event) => setProjectStatus(event.target.value as TaskStatus)}><option value="backlog">Backlog</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="done">Done</option></select></div>
               <div className="field"><label htmlFor="project-priority">Priority</label><select id="project-priority" value={projectPriority} onChange={(event) => setProjectPriority(event.target.value as TaskPriority)}><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
             </div>
-            <button className="btn primary" type="submit" disabled={busy}>{busy ? "Creating…" : "＋ Create project"}</button>
+            <button className="btn primary" type="submit" disabled={busy}>{busy ? <><span className="button-spinner" aria-hidden="true" /> Creating…</> : "＋ Create project"}</button>
           </form>
           <div className="project-grid">
             {projects.length ? projects.map((project) => (
@@ -1120,6 +1074,7 @@ export default function Home() {
                 onAddMember={addProjectMember}
                 onRemoveMember={removeProjectMember}
                 onDeleteProject={deleteProject}
+                isBusy={busy}
               />
             )) : (
               <div className="empty">
@@ -1304,7 +1259,7 @@ export default function Home() {
                 <h2 id="modal-title" style={{ marginTop: 10 }}>{selected?.title}</h2>
                 <p className="modal-sub">Comments and recent activity for this task.</p>
                 <div className="discussion-list">{comments.length ? comments.map((comment) => <article className="discussion-item" key={comment.id}><p>{comment.body}</p><small>{comment.user_id === user?.id ? "You" : "Team member"} · {new Date(comment.created_at).toLocaleString()}</small></article>) : <p className="sub">No comments yet. Start the discussion below.</p>}</div>
-                <form onSubmit={addComment} className="comment-form"><div className="field"><label htmlFor="comment-body">Add a comment</label><textarea id="comment-body" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} maxLength={2000} required placeholder="Share an update or ask a question..." /></div><button className="btn primary" type="submit">Post comment</button></form>
+                <form onSubmit={addComment} className="comment-form"><div className="field"><label htmlFor="comment-body">Add a comment</label><textarea id="comment-body" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} maxLength={2000} required placeholder="Share an update or ask a question..." /></div><button className="btn primary" type="submit" disabled={busy}>{busy ? <><span className="button-spinner" aria-hidden="true" /> Posting…</> : "Post comment"}</button></form>
                 <div className="activity-feed"><h3>Activity history</h3>{activity.length ? activity.map((entry) => <div className="activity-entry" key={entry.id}><span className="activity-dot" /><div><p>{entry.action}</p><small>{new Date(entry.created_at).toLocaleString()}</small></div></div>) : <p className="sub">No activity recorded yet.</p>}</div>
                 {error && <div className="error" role="alert">{error}</div>}
                 <div className="modal-actions"><button className="btn" onClick={() => setModal(null)}>Close</button></div>
@@ -1464,11 +1419,7 @@ export default function Home() {
                       type="submit"
                       disabled={busy}
                     >
-                      {busy
-                        ? "Saving…"
-                        : modal === "edit"
-                          ? "Save changes"
-                          : "Create task"}
+                      {busy ? <><span className="button-spinner" aria-hidden="true" /> Saving…</> : modal === "edit" ? "Save changes" : "Create task"}
                     </button>
                   </div>
                 </form>

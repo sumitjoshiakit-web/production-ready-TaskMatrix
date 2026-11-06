@@ -28,6 +28,7 @@ type ProjectCardProps = {
   onAddMember: (event: FormEvent<HTMLFormElement>, project: Project) => void;
   onRemoveMember: (member: ProjectMember) => void;
   onDeleteProject: (project: Project) => void;
+  isBusy: boolean;
 };
 
 export default function ProjectCard({
@@ -40,6 +41,7 @@ export default function ProjectCard({
   onAddMember,
   onRemoveMember,
   onDeleteProject,
+  isBusy,
 }: ProjectCardProps) {
   return (
     <article className="project-card">
@@ -62,7 +64,7 @@ export default function ProjectCard({
             placeholder="teammate@example.com"
             required
           />
-          <button className="btn small" type="submit">Add</button>
+          <button className="btn small" type="submit" disabled={isBusy}>{isBusy ? <><span className="button-spinner" aria-hidden="true" /> Adding…</> : "Add"}</button>
         </div>
       </form>
 
