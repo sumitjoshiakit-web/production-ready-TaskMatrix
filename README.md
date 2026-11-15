@@ -4,7 +4,7 @@ TaskMatrix is a collaborative project and task management workspace built with N
 
 ## Core features
 
-- Email/password authentication with Supabase and protected dashboard routes.
+- Email/password authentication, email-based password recovery, and protected dashboard routes.
 - Project creation, project member management, and task assignment by email.
 - Task create, read, update, and delete with status, priority, due date, project, and assignee.
 - Five-stage Kanban workflow: Backlog, To do, In progress, Review, and Done.
