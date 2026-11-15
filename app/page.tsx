@@ -263,7 +263,7 @@ export default function Home() {
     if (!supabase) return;
     setBusy(true);
     setError("");
-    if (!email.trim()) {
+    if (authMode !== "update-password" && !email.trim()) {
       setBusy(false);
       setError("Enter your email address first.");
       return;
