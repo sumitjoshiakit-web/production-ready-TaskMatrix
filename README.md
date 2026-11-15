@@ -1,51 +1,57 @@
-# TaskMatrix — Production & Submission Build
+# TaskMatrix
 
-TaskMatrix is a collaborative project and task management workspace built with Next.js, TypeScript, Supabase Auth/Postgres, and Recharts. It combines project organisation, team assignment, a five-stage Kanban workflow, task discussion, activity history, and progress analytics.
+TaskMatrix is a collaborative project and task management workspace built with Next.js, TypeScript, Supabase Auth/Postgres, Zustand, and Recharts. It brings project organisation, team assignment, a five-stage Kanban workflow, task discussion, activity history, and progress analytics into one responsive dashboard.
 
-## Features
-- Supabase email/password authentication and session-aware route protection.
-- Project creation and team-member email management.
-- Task CRUD with description, status, priority, due date, project, and assignee.
-- Five-stage Kanban: Backlog, To do, In progress, Review, Done.
-- Drag-and-drop and arrow controls for moving tasks.
+## Core features
+
+- Email/password authentication with Supabase and protected dashboard routes.
+- Project creation, project member management, and task assignment by email.
+- Task create, read, update, and delete with status, priority, due date, project, and assignee.
+- Five-stage Kanban workflow: Backlog, To do, In progress, Review, and Done.
+- Drag-and-drop task movement plus keyboard/tap-friendly arrow controls.
 - Task comments and activity history.
-- Search, status filtering, metrics, and completion analytics.
-- Responsive dashboard with horizontal Kanban scrolling on small screens.
-- Route-level/global error fallback screens.
-- GitHub Actions checks for lint, TypeScript, and production build.
+- Search, status filters, workspace metrics, and completion analytics.
+- AI-generated project insights through a server-side Gemini API route.
+- Responsive layout, accessible loading/error feedback, and stacked notifications.
+- GitHub Actions validation for lint, TypeScript, and production build.
 
-## Stack
-Next.js 14 App Router · React 18 · TypeScript · Supabase Auth/Postgres/RLS · Zustand · Recharts.
+## Technology
 
-## Local setup
-1. Install Node.js 20+.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env.local` and set the Supabase project URL and anon/publishable key.
-4. Back up the existing Supabase project first. Review the migration, then run `supabase/schema.sql` in the Supabase SQL Editor. The migration no longer clears legacy `project_id` values; its project foreign key is added `NOT VALID` so existing rows are preserved while new writes are checked.
-5. Configure Supabase Auth Site URL and allowed redirect URLs for localhost and the production domain.
-6. Run `npm run dev` and open http://localhost:3000.
+Next.js 14 App Router · React 18 · TypeScript · Supabase Auth/Postgres/RLS · Zustand · Recharts · Gemini API.
 
-## Environment variables
+## Local development
+
+**Requirements:** Node.js 20 or newer and npm.
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open http://localhost:3000.
+
+Set the following values in `.env.local`:
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/publishable key |
-| `NEXT_PUBLIC_SITE_URL` | No | Canonical URL used for metadata |
-| `GEMINI_API_KEY` | Optional for AI summary | Server-only Gemini API key; never expose with a NEXT_PUBLIC_ prefix |
-| `GEMINI_MODEL` | No | Optional Gemini model override (defaults to gemini-2.5-flash) |
+| `NEXT_PUBLIC_SITE_URL` | Recommended in production | Canonical site URL used for metadata |
+| `GEMINI_API_KEY` | Required for AI insights | Server-only Gemini API key |
+| `GEMINI_MODEL` | No | Gemini model override; defaults to `gemini-2.5-flash` |
 
-Never expose the Supabase `service_role` key in browser code, public environment variables, screenshots, or commits.
+Never add a `service_role` key to browser code, a `NEXT_PUBLIC_*` variable, screenshots, or source control. Never expose `GEMINI_API_KEY` to the browser.
 
-## Validation
-```bash
-npm run lint
-npm run typecheck
-npm run build
-```
-GitHub Actions runs these checks on pushes and pull requests. A successful build does not prove that production Supabase credentials, RLS, email confirmation, or Vercel settings are correct.
+## Supabase configuration
 
-## Supabase security verification
-Run the supplied SQL in the intended Supabase project only after taking a backup. The migration replaces only the TaskMatrix policies/triggers it explicitly names; it does not drop application tables or delete existing task rows. The project foreign key is added as `NOT VALID` to avoid rewriting legacy rows. Before validating it, inspect any legacy references with:
+1. Create or select a Supabase project.
+2. Review `supabase/schema.sql` and back up existing data before applying schema changes in the Supabase SQL Editor.
+3. In **Authentication → URL Configuration**, set the Site URL to the deployed app origin.
+4. Add the production callback `https://YOUR-DOMAIN/login` to the Redirect URLs allow-list. For local development, also allow `http://localhost:3000/login`.
+5. Test with two separate accounts to confirm that row-level security (RLS) prevents one user from reading or modifying another user's private projects and tasks.
+
+The schema migration is designed to preserve existing task rows and legacy `project_id` values. The project foreign key is added as `NOT VALID` so existing rows can be inspected before constraint validation. Before validating it, check for orphaned project references:
 
 ```sql
 select t.id, t.project_id
@@ -54,44 +60,43 @@ left join public.projects p on p.id = t.project_id
 where t.project_id is not null and p.id is null;
 ```
 
-If this returns no rows, you may validate the constraint with `alter table public.tasks validate constraint tasks_project_id_fkey;`. If it returns rows, investigate and repair those references manually; do not clear them automatically. Test with two separate accounts:
-- User A can manage their own projects and tasks.
-- User B cannot read or modify User A's private records unless an explicit assignee policy grants access to that task.
-- Project membership alone does not grant blanket task access.
-- Comments and activity records obey task-level access policies.
-- Signed-out users cannot access `/dashboard`.
-- Refreshing a signed-in session preserves authentication and saved records.
+Resolve any returned rows deliberately; do not clear legacy references automatically. Project membership does not grant blanket access to every task. Comments and activity records must follow task-level policies.
 
-Do not mark these checks complete until they are tested against the actual Supabase project.
+## AI project insights
 
-## AI dashboard summary
-The dashboard includes an optional AI summary powered by a server-side Next.js route. Add `GEMINI_API_KEY` to Vercel Production/Preview/Development environment variables to enable it. The browser sends the signed-in Supabase access token and a bounded dashboard snapshot; the server verifies the user with Supabase before forwarding the summary request to Gemini. The provider key is never sent to the browser. If the key is absent or the provider is unavailable, the dashboard remains usable and shows a recoverable fallback message.
+The dashboard sends a bounded task/project snapshot and the signed-in Supabase access token to `/api/ai/summary`. The server verifies the token with Supabase before calling Gemini. The Gemini key remains server-side.
+
+Set `GEMINI_API_KEY` in the Vercel environment for every deployment environment that should offer AI insights. If the key is not configured or Gemini is unavailable, the rest of the workspace remains usable and the AI panel shows a retryable message.
+
+The route limits snapshot item counts and text lengths. It does not currently use a shared distributed per-user rate limiter; configure provider-side quotas and monitor Gemini usage for production.
+
+## Validation
+
+Run the same checks used by GitHub Actions:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+The CI workflow runs these checks on pushes and pull requests. Build-time Supabase values in CI are placeholders used only to compile the app; they do not validate live authentication, database policies, or production environment configuration.
 
 ## Vercel deployment
-1. Import this repository into Vercel and select the Next.js preset.
-2. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Production, Preview, and Development as needed. Add `NEXT_PUBLIC_SITE_URL` for the production canonical URL (and use the matching deployment URL for Preview if you need preview metadata).
-3. Set `NEXT_PUBLIC_SITE_URL` to the exact deployed URL.
-4. Deploy and inspect the build logs.
-5. Add the exact Vercel URL to Supabase Auth Site URL and redirect allow-list.
-6. Test registration, email confirmation, login/logout, protected routes, CRUD, assignment, comments, and analytics on the live site.
-7. Add the verified deployment URL below.
 
-**Production URL:** _Add after deployment is verified._
+1. Import this GitHub repository into Vercel and use the Next.js preset.
+2. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` to the appropriate Vercel environments. Set `NEXT_PUBLIC_SITE_URL` to the exact production origin, for example `https://your-project.vercel.app`.
+3. Add `GEMINI_API_KEY` as a server-side environment variable to enable AI insights. `GEMINI_MODEL` is optional.
+4. Deploy the application.
+5. Add the deployed `/login` callback URL to the Supabase Auth Redirect URLs allow-list and set the Supabase Site URL to the production origin.
+6. Verify registration/email confirmation, login/logout, protected routes, project/task CRUD, Kanban movement, comments, analytics, and the AI summary on the deployed site.
 
-## Submission checklist
-- [ ] Supabase environment variables configured in Vercel.
-- [ ] Current SQL schema applied to the target Supabase project.
-- [ ] Owner/assignee access verified with two test accounts.
-- [ ] Authentication and protected routes tested in production.
-- [ ] Project/task CRUD, drag-and-drop, comments, and analytics tested.
-- [ ] Mobile layout tested at narrow viewport widths.
-- [ ] GitHub Actions green on the final commit.
-- [ ] Vercel production deployment and SSL verified.
-- [ ] Production URL added above.
-- [ ] Reviewer-accessible Figma link and final screenshots added if required.
+A deployment URL, Lighthouse result, screenshots, and design-file link are intentionally not listed here unless they have been supplied and verified. The repository does not claim a production deployment or audit result that has not been checked.
 
 ## Project history
-This repository continues the TaskMatrix Sprint 15 implementation and preserves its Next.js + Supabase architecture and product features.
+
+This repository continues the TaskMatrix Sprint 15 implementation and preserves its Next.js + Supabase architecture.
+
 - [Sprint 13 planning](https://github.com/sumitjoshiakit-web/prodesk-capstone-TaskMatrix1)
 - [Sprint 14 authentication foundation](https://github.com/sumitjoshiakit-web/prodesk-capstone--TaskMatrix-2)
 - [Sprint 15 implementation source](https://github.com/sumitjoshiakit-web/prodesk-capstone-TaskMatrix3)

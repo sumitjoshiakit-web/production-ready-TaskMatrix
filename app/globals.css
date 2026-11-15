@@ -1746,3 +1746,13 @@ button:disabled { cursor: not-allowed; }
   .button-spinner { animation-duration: 1.5s; }
   .btn:not(:disabled):hover { transform: none; }
 }
+
+
+/* Toast queue: independent lifetimes, stacked success and error feedback. */
+.toast-stack { position: fixed; z-index: 1100; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); display: grid; gap: 10px; width: min(420px, calc(100vw - 36px)); pointer-events: none; }
+.toast-stack .toast-notice { position: static; width: 100%; pointer-events: auto; }
+.toast-notice--success { border-color: #b8e3ce; background: #f0fbf5; color: #176b43; }
+.toast-notice--error { border-color: #f0b9b9; background: #fff3f3; color: #9f2929; }
+.toast-dismiss { flex: 0 0 26px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: currentColor; font-size: 19px; line-height: 1; }
+.toast-dismiss:hover { background: #0000000d; }
+@media (max-width: 480px) { .toast-stack { right: 11px; bottom: max(11px, env(safe-area-inset-bottom)); width: calc(100vw - 22px); } }

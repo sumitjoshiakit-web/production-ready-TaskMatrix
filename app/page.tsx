@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   getSupabase,
@@ -10,8 +10,8 @@ import {
 } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/auth-store";
 import ProjectCard, { type Project, type ProjectMember } from "@/components/ProjectCard";
-import TaskBoard from "@/components/TaskBoard";
-import AiSummary from "@/components/AiSummary";
+const TaskBoard = dynamic(() => import("@/components/TaskBoard"), { ssr: false, loading: () => <div className="panel chart-loading">Preparing Kanban board…</div> });
+const AiSummary = dynamic(() => import("@/components/AiSummary"), { ssr: false, loading: () => <div className="panel chart-loading">Preparing AI insights…</div> });
 
 const CompletionChart = dynamic(() => import("@/components/CompletionChart"), {
   ssr: false,
@@ -19,6 +19,7 @@ const CompletionChart = dynamic(() => import("@/components/CompletionChart"), {
 });
 
 type Filter = "all" | TaskStatus;
+type ToastNotice = { id: number; message: string; kind: "success" | "error" };
 type Draft = {
   title: string;
   description: string;
@@ -87,7 +88,9 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notices, setNotices] = useState<ToastNotice[]>([]);
+  const toastTimers = useRef<Map<number, number>>(new Map());
+  const nextToastId = useRef(0);
   const [showPassword, setShowPassword] = useState(false);
 
   const loadTasks = useCallback(
@@ -158,7 +161,7 @@ export default function Home() {
       alive = false;
       listener.subscription.unsubscribe();
     };
-  }, [supabase, loadTasks, loadProjects]);
+  }, [supabase, setUser, loadTasks, loadProjects]);
 
   // Keep the Sprint 14 route vocabulary while retaining the existing Supabase browser session.
   useEffect(() => {
@@ -222,10 +225,32 @@ export default function Home() {
     return days;
   }, [tasks]);
 
-  const notify = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 3500);
-  };
+  const notify = useCallback((message: string, kind: ToastNotice["kind"] = "success") => {
+    const id = ++nextToastId.current;
+    setNotices((current) => [...current, { id, message, kind }].slice(-4));
+    const timer = window.setTimeout(() => {
+      setNotices((current) => current.filter((toast) => toast.id !== id));
+      toastTimers.current.delete(id);
+    }, 4000);
+    toastTimers.current.set(id, timer);
+  }, []);
+
+  useEffect(() => () => {
+    toastTimers.current.forEach((timer) => window.clearTimeout(timer));
+    toastTimers.current.clear();
+  }, []);
+
+  const toastStack = notices.length > 0 ? (
+    <div className="toast-stack" aria-label="Notifications">
+      {notices.map((toast) => (
+        <div key={toast.id} className={`toast-notice ${toast.kind === "error" ? "toast-notice--error" : "toast-notice--success"}`} role={toast.kind === "error" ? "alert" : "status"} aria-live={toast.kind === "error" ? "assertive" : "polite"}>
+          <span aria-hidden="true">{toast.kind === "error" ? "!" : "✓"}</span>
+          <span>{toast.message}</span>
+          <button type="button" className="toast-dismiss" aria-label="Dismiss notification" onClick={() => setNotices((current) => current.filter((item) => item.id !== toast.id))}>×</button>
+        </div>
+      ))}
+    </div>
+  ) : null;
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
@@ -236,31 +261,34 @@ export default function Home() {
         ? await supabase.auth.signUp({
             email: email.trim(),
             password,
-            options: { data: { full_name: fullName.trim() } },
+            options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/login` },
           })
         : await supabase.auth.signInWithPassword({
             email: email.trim(),
             password,
           });
     setBusy(false);
-    if (result.error) setError(result.error.message);
-    else if (authMode === "signup" && !result.data.session)
-      setNotice(
-        "Account created. Check your email to confirm your address, then sign in.",
-      );
-    else
-      setNotice(
-        authMode === "signup"
-          ? "Account created successfully."
-          : "Welcome back.",
-      );
+    if (result.error) {
+      setError(result.error.message);
+      notify(result.error.message, "error");
+    } else if (authMode === "signup" && !result.data.session) {
+      notify("Account created. Check your email to confirm your address, then sign in.");
+    } else {
+      notify(authMode === "signup" ? "Account created successfully." : "Welcome back.");
+    }
   }
   async function signOut() {
     if (!supabase) return;
-    await supabase.auth.signOut();
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      setError(signOutError.message);
+      notify(signOutError.message, "error");
+      return;
+    }
     setUser(null);
     setTasks([]);
     setError("");
+    notify("Signed out successfully.");
   }
   function openCreate() {
     setSelected(null);
@@ -322,6 +350,7 @@ export default function Home() {
     setBusy(false);
     if (result.error) {
       setError(result.error.message);
+      notify(result.error.message, "error");
       return;
     }
     await supabase.from("task_activity").insert({ task_id: (result.data as Task).id, user_id: user.id, action: modal === "edit" ? `Updated task: ${title}` : `Created task: ${title}` });
@@ -350,6 +379,7 @@ export default function Home() {
     setBusy(false);
     if (deleteError) {
       setError(deleteError.message);
+      notify(deleteError.message, "error");
       return;
     }
     await supabase.from("task_activity").insert({ task_id: selected.id, user_id: user.id, action: `Deleted task: ${selected.title}` });
@@ -369,6 +399,7 @@ export default function Home() {
       .single();
     if (updateError) {
       setError(updateError.message);
+      notify(updateError.message, "error");
       return;
     }
     await supabase.from("task_activity").insert({ task_id: task.id, user_id: user.id, action: `Moved task to ${statusLabel[nextStatus]}` });
@@ -385,7 +416,7 @@ export default function Home() {
   async function moveTask(task: Task, nextStatus: TaskStatus) {
     if (!supabase || !user) return;
     const { data, error: updateError } = await supabase.from("tasks").update({ status: nextStatus }).eq("id", task.id).select().single();
-    if (updateError) { setError(updateError.message); return; }
+    if (updateError) { setError(updateError.message); notify(updateError.message, "error"); return; }
     await supabase.from("task_activity").insert({ task_id: task.id, user_id: user.id, action: `Moved task to ${statusLabel[nextStatus]}` });
     setTasks((current) => current.map((item) => item.id === task.id ? data as Task : item));
     notify(`Moved to ${statusLabel[nextStatus]}.`);
@@ -409,6 +440,7 @@ export default function Home() {
     if (commentError) {
       setBusy(false);
       setError(commentError.message);
+      notify(commentError.message, "error");
       return;
     }
     await supabase.from("task_activity").insert({ task_id: selected.id, user_id: user.id, action: "Added a comment" });
@@ -436,7 +468,9 @@ export default function Home() {
       .single();
     setBusy(false);
     if (memberError) {
-      setError(memberError.code === "23505" ? "This email is already on the project." : memberError.message);
+      const message = memberError.code === "23505" ? "This email is already on the project." : memberError.message;
+      setError(message);
+      notify(message, "error");
       return;
     }
     setMembers((current) => [...current, data as ProjectMember]);
@@ -454,6 +488,7 @@ export default function Home() {
       .eq("owner_id", user.id);
     if (removeError) {
       setError(removeError.message);
+      notify(removeError.message, "error");
       return;
     }
     setMembers((current) => current.filter((item) => item.id !== member.id));
@@ -469,6 +504,7 @@ export default function Home() {
       .eq("owner_id", user.id);
     if (deleteProjectError) {
       setError(deleteProjectError.message);
+      notify(deleteProjectError.message, "error");
       return;
     }
     setProjects((current) => current.filter((item) => item.id !== project.id));
@@ -633,7 +669,7 @@ export default function Home() {
                   nextMode === "signup" ? "/register" : "/login",
                 );
                 setError("");
-                setNotice("");
+                setNotices([]);
               }}
             >
               {authMode === "login" ? "Get started ↗" : "Sign in ↗"}
@@ -746,11 +782,6 @@ export default function Home() {
                   {error}
                 </div>
               )}
-              {notice && (
-                <div className="success" role="status">
-                  {notice}
-                </div>
-              )}
               <button
                 className="btn primary auth-submit"
                 type="submit"
@@ -764,6 +795,7 @@ export default function Home() {
             </p>
           </div>
         </section>
+        {toastStack}
       </main>
     );
 
@@ -892,12 +924,7 @@ export default function Home() {
             {error}
           </div>
         )}
-        {notice && (
-          <div className="success toast-notice" role="status" aria-live="polite">
-            <span aria-hidden="true">✓</span>
-            {notice}
-          </div>
-        )}
+        {toastStack}
         <section className="stats">
           <article className="stat">
             <span className="stat-icon">▤</span>
@@ -1015,6 +1042,7 @@ export default function Home() {
             if (projectError || !projectData) {
               setBusy(false);
               setError(projectError?.message ?? "Could not create project.");
+              notify(projectError?.message ?? "Could not create project.", "error");
               return;
             }
             // A project starts with a matching task so it is immediately visible on the Kanban board.
@@ -1035,6 +1063,7 @@ export default function Home() {
               await supabase.from("projects").delete().eq("id", projectData.id).eq("owner_id", user.id);
               setBusy(false);
               setError(taskError?.message ?? "Project was created but its board card could not be created. Please try again.");
+              notify(taskError?.message ?? "Project was created but its board card could not be created. Please try again.", "error");
               return;
             }
             setProjects((current) => [projectData as Project, ...current]);

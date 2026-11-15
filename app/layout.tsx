@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Plan projects, manage tasks across a five-stage Kanban board, collaborate with teammates, and track progress in TaskMatrix.",
   applicationName: "TaskMatrix",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://taskmatrix.vercel.app"),
+  ...(process.env.NEXT_PUBLIC_SITE_URL ? { metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL) } : {}),
   openGraph: { title: "TaskMatrix — Project Workspace", description: "A focused workspace for planning, collaboration, and progress.", type: "website" },
   robots: { index: true, follow: true },
 };
