@@ -91,8 +91,6 @@ The CI workflow runs these checks on pushes and pull requests. Build-time Supaba
 5. Add the deployed `/login` callback URL to the Supabase Auth Redirect URLs allow-list and set the Supabase Site URL to the production origin.
 6. Verify registration/email confirmation, login/logout, protected routes, project/task CRUD, Kanban movement, comments, analytics, and the AI summary on the deployed site.
 
-A deployment URL, Lighthouse result, screenshots, and design-file link are intentionally not listed here unless they have been supplied and verified. The repository does not claim a production deployment or audit result that has not been checked.
-
 ## Project history
 
 This repository continues the TaskMatrix Sprint 15 implementation and preserves its Next.js + Supabase architecture.
