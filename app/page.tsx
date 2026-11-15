@@ -63,7 +63,8 @@ export default function Home() {
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const [ready, setReady] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authMode, setAuthMode] = useState<"login" | "signup" | "forgot" | "update-password">("login");
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -167,6 +168,7 @@ export default function Home() {
   useEffect(() => {
     if (!ready || typeof window === "undefined") return;
     const path = window.location.pathname;
+    if (user && passwordRecovery) return;
     if (user && path !== "/dashboard") {
       window.history.replaceState({}, "", "/dashboard");
       return;
@@ -179,7 +181,7 @@ export default function Home() {
     if (!user && (path === "/login" || path === "/register")) {
       setAuthMode(path === "/register" ? "signup" : "login");
     }
-  }, [ready, user]);
+  }, [ready, user, passwordRecovery]);
 
 
 
@@ -256,6 +258,43 @@ export default function Home() {
     if (!supabase) return;
     setBusy(true);
     setError("");
+    if (!email.trim()) {
+      setBusy(false);
+      setError("Enter your email address first.");
+      return;
+    }
+    if (authMode === "forgot") {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/login`,
+      });
+      setBusy(false);
+      if (resetError) {
+        setError(resetError.message);
+        notify(resetError.message, "error");
+      } else {
+        setError("");
+        notify("If an account exists for this email, a password reset link has been sent.");
+      }
+      return;
+    }
+    if (authMode === "update-password") {
+      const { error: updatePasswordError } = await supabase.auth.updateUser({ password });
+      setBusy(false);
+      if (updatePasswordError) {
+        setError(updatePasswordError.message);
+        notify(updatePasswordError.message, "error");
+      } else {
+        setPasswordRecovery(false);
+        setPassword("");
+        setAuthMode("login");
+        setUser(null);
+        await supabase.auth.signOut();
+        window.history.replaceState({}, "", "/login");
+        setError("");
+        notify("Password updated. Sign in with your new password.");
+      }
+      return;
+    }
     const result =
       authMode === "signup"
         ? await supabase.auth.signUp({
@@ -651,44 +690,34 @@ export default function Home() {
           </div>
         </section>
         <section className="form-panel">
-          <div className="form-top">
-            <span>
-              {authMode === "login"
-                ? "Don't have an account?"
-                : "Already have an account?"}
-            </span>
-            <button
-              className="text-link"
-              type="button"
-              onClick={() => {
-                const nextMode = authMode === "login" ? "signup" : "login";
-                setAuthMode(nextMode);
-                window.history.replaceState(
-                  {},
-                  "",
-                  nextMode === "signup" ? "/register" : "/login",
-                );
-                setError("");
-                setNotices([]);
-              }}
-            >
-              {authMode === "login" ? "Get started ↗" : "Sign in ↗"}
-            </button>
-          </div>
+          {(authMode === "login" || authMode === "signup") && (
+            <div className="form-top">
+              <span>{authMode === "login" ? "Don't have an account?" : "Already have an account?"}</span>
+              <button
+                className="text-link"
+                type="button"
+                onClick={() => {
+                  const nextMode = authMode === "login" ? "signup" : "login";
+                  setAuthMode(nextMode);
+                  window.history.replaceState({}, "", nextMode === "signup" ? "/register" : "/login");
+                  setError("");
+                  setNotices([]);
+                }}
+              >
+                {authMode === "login" ? "Get started ↗" : "Sign in ↗"}
+              </button>
+            </div>
+          )}
           <div className="form-card">
             <div className="form-icon">T</div>
             <p className="form-kicker">
-              {authMode === "login" ? "WELCOME BACK" : "GET STARTED"}
+              {authMode === "login" ? "WELCOME BACK" : authMode === "signup" ? "GET STARTED" : authMode === "forgot" ? "ACCOUNT RECOVERY" : "SECURE YOUR ACCOUNT"}
             </p>
             <h2>
-              {authMode === "login"
-                ? "Sign in to TaskMatrix"
-                : "Create your account"}
+              {authMode === "login" ? "Sign in to TaskMatrix" : authMode === "signup" ? "Create your account" : authMode === "forgot" ? "Reset your password" : "Choose a new password"}
             </h2>
             <p className="form-subtitle">
-              {authMode === "login"
-                ? "Enter your details to access your workspace."
-                : "Create your account and make space for meaningful work."}
+              {authMode === "login" ? "Enter your details to access your workspace." : authMode === "signup" ? "Create your account and make space for meaningful work." : authMode === "forgot" ? "Enter your account email and we'll send you a secure reset link." : "Enter a new password for your TaskMatrix account."}
             </p>
             <form className="form-stack" onSubmit={handleAuth}>
               {authMode === "signup" && (
@@ -717,8 +746,9 @@ export default function Home() {
                   autoComplete="email"
                 />
               </div>
+              {authMode !== "forgot" && (
               <div className="field">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{authMode === "update-password" ? "New password" : "Password"}</label>
                 <div className="password-input-wrap">
                   <input
                     id="password"
@@ -777,6 +807,19 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+              )}
+              {authMode === "login" && (
+                <div className="forgot-password-row">
+                  <button type="button" className="text-link" onClick={() => { setAuthMode("forgot"); setError(""); setPassword(""); }}>
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+              {authMode === "forgot" && (
+                <button type="button" className="text-link" onClick={() => { setAuthMode("login"); setError(""); }}>
+                  ← Back to sign in
+                </button>
+              )}
               {error && (
                 <div className="error" role="alert">
                   {error}
@@ -787,7 +830,7 @@ export default function Home() {
                 type="submit"
                 disabled={busy}
               >
-                {busy ? <><span className="button-spinner" aria-hidden="true" /> Please wait…</> : authMode === "login" ? "Sign in →" : "Create account →"}
+                {busy ? <><span className="button-spinner" aria-hidden="true" /> Please wait…</> : authMode === "login" ? "Sign in →" : authMode === "signup" ? "Create account →" : authMode === "forgot" ? "Send reset link →" : "Update password →"}
               </button>
             </form>
             <p className="secure-note">

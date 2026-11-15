@@ -1756,3 +1756,7 @@ button:disabled { cursor: not-allowed; }
 .toast-dismiss { flex: 0 0 26px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: currentColor; font-size: 19px; line-height: 1; }
 .toast-dismiss:hover { background: #0000000d; }
 @media (max-width: 480px) { .toast-stack { right: 11px; bottom: max(11px, env(safe-area-inset-bottom)); width: calc(100vw - 22px); } }
+
+
+.forgot-password-row { display: flex; justify-content: flex-end; margin-top: -8px; }
+.forgot-password-row .text-link { padding: 4px 0; font-size: 0.88rem; }
