@@ -145,8 +145,13 @@ export default function Home() {
       }
     });
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         if (!alive) return;
+        if (event === "PASSWORD_RECOVERY") {
+          setPasswordRecovery(true);
+          setAuthMode("update-password");
+          setError("");
+        }
         const nextUser = session?.user ?? null;
         setUser(nextUser);
         if (nextUser) {
