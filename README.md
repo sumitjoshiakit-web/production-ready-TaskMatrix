@@ -48,7 +48,7 @@ Never add a `service_role` key to browser code, a `NEXT_PUBLIC_*` variable, scre
 1. Create or select a Supabase project.
 2. Review `supabase/schema.sql` and back up existing data before applying schema changes in the Supabase SQL Editor.
 3. In **Authentication → URL Configuration**, set the Site URL to the deployed app origin.
-4. Add the production callback `https://YOUR-DOMAIN/login` to the Redirect URLs allow-list. For local development, also allow `http://localhost:3000/login`.
+4. Add the exact deployed `/login` callback URL to the Redirect URLs allow-list. For local development, also allow `http://localhost:3000/login`.
 5. Test with two separate accounts to confirm that row-level security (RLS) prevents one user from reading or modifying another user's private projects and tasks.
 
 The schema migration is designed to preserve existing task rows and legacy `project_id` values. The project foreign key is added as `NOT VALID` so existing rows can be inspected before constraint validation. Before validating it, check for orphaned project references:
@@ -85,7 +85,7 @@ The CI workflow runs these checks on pushes and pull requests. Build-time Supaba
 ## Vercel deployment
 
 1. Import this GitHub repository into Vercel and use the Next.js preset.
-2. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` to the appropriate Vercel environments. Set `NEXT_PUBLIC_SITE_URL` to the exact production origin, for example `https://your-project.vercel.app`.
+2. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` to the appropriate Vercel environments. Set `NEXT_PUBLIC_SITE_URL` to the exact production origin shown in your Vercel project settings.
 3. Add `GEMINI_API_KEY` as a server-side environment variable to enable AI insights. `GEMINI_MODEL` is optional.
 4. Deploy the application.
 5. Add the deployed `/login` callback URL to the Supabase Auth Redirect URLs allow-list and set the Supabase Site URL to the production origin.
