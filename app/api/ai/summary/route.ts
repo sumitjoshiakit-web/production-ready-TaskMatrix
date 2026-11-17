@@ -17,8 +17,31 @@ type DashboardSnapshot = {
   }>;
 };
 
+type GeminiErrorPayload = {
+  error?: {
+    status?: string;
+    code?: number;
+  };
+};
+
 const cleanText = (value: unknown, maxLength: number) =>
   typeof value === "string" ? value.slice(0, maxLength) : "";
+
+function getProviderErrorMessage(status: number) {
+  if (status === 400 || status === 403) {
+    return "Gemini rejected the API key or request. Check that your Google AI Studio key is valid and the Generative Language API is enabled.";
+  }
+  if (status === 404) {
+    return "The configured Gemini model was not found. Set GEMINI_MODEL to gemini-2.5-flash in Vercel.";
+  }
+  if (status === 429) {
+    return "Gemini API quota or rate limit reached. Check your Google AI Studio usage and billing, then try again later.";
+  }
+  if (status >= 500) {
+    return "Google Gemini is temporarily unavailable. Please try again shortly.";
+  }
+  return "Gemini could not process this request. Check the server configuration and try again.";
+}
 
 export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization") || "";
@@ -88,6 +111,7 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           systemInstruction: {
             parts: [{
@@ -98,28 +122,66 @@ export async function POST(request: NextRequest) {
             role: "user",
             parts: [{ text: JSON.stringify(safeSnapshot) }],
           }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 800,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
       },
     );
 
     if (!aiResponse.ok) {
-      return NextResponse.json({ error: "The AI provider is temporarily unavailable. Please retry in a moment." }, { status: 502 });
+      let providerError: GeminiErrorPayload = {};
+      try {
+        providerError = (await aiResponse.json()) as GeminiErrorPayload;
+      } catch {
+        // Do not expose an unparsed provider response to the client.
+      }
+      console.error("[AI summary] Gemini request failed", {
+        httpStatus: aiResponse.status,
+        providerStatus: providerError.error?.status || "unknown",
+        model,
+      });
+      return NextResponse.json(
+        { error: getProviderErrorMessage(aiResponse.status) },
+        { status: aiResponse.status === 429 ? 429 : 502 },
+      );
     }
+
     const result = (await aiResponse.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        finishReason?: string;
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
     };
-    const summary = result.candidates?.[0]?.content?.parts
+    const candidate = result.candidates?.[0];
+    const summary = candidate?.content?.parts
       ?.map((part) => part.text || "")
       .join("")
       .trim();
 
     if (!summary) {
-      return NextResponse.json({ error: "The AI provider returned an empty summary. Please try again." }, { status: 502 });
+      console.error("[AI summary] Gemini returned no text", {
+        finishReason: candidate?.finishReason || "unknown",
+        model,
+      });
+      return NextResponse.json({
+        error: "Gemini returned no summary text. Please retry; if this continues, check the selected model in Vercel.",
+      }, { status: 502 });
     }
 
     return NextResponse.json({ summary });
-  } catch {
-    return NextResponse.json({ error: "Could not reach the AI provider. Check your connection and try again." }, { status: 502 });
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    console.error("[AI summary] Gemini request could not complete", {
+      reason: timedOut ? "timeout" : "network_error",
+      model,
+    });
+    return NextResponse.json({
+      error: timedOut
+        ? "Gemini took too long to respond. Please try again."
+        : "Could not reach Google Gemini. Check the server connection and try again.",
+    }, { status: 502 });
   }
 }
