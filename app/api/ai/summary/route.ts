@@ -32,7 +32,7 @@ function getProviderErrorMessage(status: number) {
     return "Gemini rejected the API key or request. Check that your Google AI Studio key is valid and the Generative Language API is enabled.";
   }
   if (status === 404) {
-    return "The selected Gemini model is unavailable for this API key. In Vercel, set GEMINI_MODEL to gemini-3.6-flash and redeploy.";
+    return "The selected Gemini model is unavailable for this API key. In Vercel, set GEMINI_MODEL to gemini-3.8-flash and redeploy.";
   }
   if (status === 429) {
     return "Gemini API quota or rate limit reached. Check your Google AI Studio usage and billing, then try again later.";
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     })),
   };
 
-  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   try {
     const aiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
