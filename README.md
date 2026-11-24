@@ -39,7 +39,7 @@ Set the following values in `.env.local`:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/publishable key |
 | `NEXT_PUBLIC_SITE_URL` | Recommended in production | Canonical site URL used for metadata |
 | `GEMINI_API_KEY` | Required for AI insights | Server-only Gemini API key |
-| `GEMINI_MODEL` | No | Gemini model override; defaults to `gemini-2.5-flash` |
+| `GEMINI_MODEL` | No | Gemini model override; defaults to `gemini-3.8-flash` |
 
 Never add a `service_role` key to browser code, a `NEXT_PUBLIC_*` variable, screenshots, or source control. Never expose `GEMINI_API_KEY` to the browser.
 
