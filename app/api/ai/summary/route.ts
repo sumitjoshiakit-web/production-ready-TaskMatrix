@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type DashboardSnapshot = {
   metrics?: { totalTasks?: number; completedTasks?: number; overdueTasks?: number };
@@ -106,14 +107,17 @@ export async function POST(request: NextRequest) {
     })),
   };
 
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
   try {
-    const requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const requestOptions: RequestInit = {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
         systemInstruction: {
           parts: [{
@@ -135,7 +139,7 @@ export async function POST(request: NextRequest) {
     let aiResponse: Response | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       aiResponse = await fetch(requestUrl, requestOptions);
-      if (aiResponse.status < 500 || attempt === 1) break;
+      if (aiResponse.status !== 503 || attempt === 1) break;
       await new Promise((resolve) => setTimeout(resolve, 800));
     }
     if (!aiResponse) {
